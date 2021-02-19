@@ -1,0 +1,242 @@
+---
+author: "PJKA"
+output: 
+  pdf_document
+---
+
+# Calculations
+
+*Note*: for this help document, we use `mutate()` often to add all these terms to the dataframe. This is just as a sample calculation so you can see all the steps. In the final function, this is all done 'under the hood' and it will only output the final calculated values of $p\text{CO}_2$.
+
+## Introduction
+
+Here we go through all the calculations, assumptions, and constants to calculate pCO2 values that takes into account salinity (due to preservation of samples).
+
+Values are calculated using the headspace equilibrium technique (ref goes here). Briefly, a sample of water is taken, preserved in-field, and brought back to the lab for analysis. In the lab, water is removed from the container at-the-same-time as helium is injected in its place. The sample is then gently shaken to allow CO2 to equilibrate between the liquid and gas phase. A gas sample is then taken and injected into a gas chromatograph, where we get CO2 values (in ppm).
+
+Up to this point, a number of parameters are already known. They include:  
+- Water temperature in field (C)  
+- Air pressure in field (kPa)  
+- Water temperature in lab during analysis (C)  
+- Air pressure in lab during analysis (kPa)  
+- Salt added (for preservation of samples; g)  
+- Weight of the sampling container (g; empty)  
+- Weight of full container(g; water and container)  
+- Weight of the container with headspace (g)  
+- Injected amount of helium (mL) - CO2 value from GC (ppm)  
+
+You would begin by creating a dataframe `df` such as:
+
+```{r, echo=FALSE}
+library(tidyverse)
+
+df <- data.frame(Sample = c('Fun Lake', 'Not Fun Lake'),
+                 temp_field_C = c(25, 4),
+                 p_field_kPa = c(100, 93.5),
+                 temp_lab_C = c(22, 22),
+                 p_lab_kPa = c(101,101),
+                 KCl_added_g = c(0.05, 0.05),
+                 exe_g = c(19.8, 19.7),
+                 exe_full_g = c(26, 26),
+                 exe_headspace_g = c(24.5, 24.3),
+                 he_inj_mL = c(10, 10),
+                 measCO2_ppm = c(850, 405))
+```
+
+## Conversions
+
+The first thing we do is convert the input values to the units used in
+the various calculations, as well as calculate the total water volume
+before and after headspace:
+
+```{r}
+df <- df %>%
+  mutate(temp_field_K = temp_field_C + 273.15,
+         temp_lab_K = temp_lab_C + 273.15,
+         p_field_atm = p_field_kPa * 0.009869,
+         p_lab_atm = p_lab_kPa * 0.009869,
+         vol_water_L = (exe_full_g - exe_g)/1000, #assuming density of 1.00 (g~mL)
+         vol_HS_L = (exe_full_g - exe_headspace_g)/1000,
+         vol_waterHS_L = (vol_water_L - vol_HS_L),
+         he_inj_L = he_inj_mL/1000)
+```
+
+## Calculate the moles of $p\text{CO}_2$ in vial
+
+The headspace-equilibria method results in the partitioning of $\text{CO}_2$ between the water in the vial and the helium (He) headspace. When we measure the gas in the vial, we get the $\text{CO}_2$ in ppm, and is equivalent to $x$ (ppm volume):  
+$$ p\text{CO}_2 = x\times P_{\text air} $$
+
+> Brief review of gas units
+> ppmv is equivalent to 1 gas volume per $10^6$ air volumes
+> or 1 uL per 1L of air  
+
+We can use this equation with the Ideal Gas Law to get the moles of $\text{CO}_2$ in the headspace.  
+But what is $P_{air}$ after we've injected He?  
+
+### Calculation of new P in headspace after He injection
+
+We know mass is conserved during equilibration between the water and gas, but we also assume the exsolution of other gases does not affect the headspace pressure (i.e. $\text{H}_2\text{O},\text{N}_2\text{O}, \text{N}_2,\text{O}_2, \text{Ar}$).  
+
+Thus, for He we get:  
+$$\text{mol}_{\text{aq}}+\text{mol}_{\text{g}}=\text{mol}_{\text{total}}$$
+where 
+$\text{mol}_{\text{aq}}$ = concentration of He  
+$\text{mol}_{\text{g}}$ = ideal gas of He in headspace  
+$\text{mol}_{\text{total}}$ = ideal gas injected  
+
+We can substitute in what we know: 
+$$V_{\text {sampleHS}} \times (K_H \times P_{\text {He}})] + \frac{\displaystyle P_{\text {He}} \times V_{\text {HS}}}{\displaystyle R \times T} = \frac{\displaystyle P_{\text {lab}} \times V_{\text {inj}}}{\displaystyle R \times T}$$  
+
+Re-arrange and solve for the unknown $P_{He}$:  
+
+$$P_{\text {He}}= \frac{\displaystyle (\frac{\displaystyle P_{\text {lab}} \times V_{\text {inj}}}{\displaystyle R \times T})}{\displaystyle V_{\text {sampleHS}} \times K_H + \frac{V_{\text {HS}}}{R \times T}}$$
+
+This gives us the new $P$ in the headspace ($P_{He}$), which we need to calculate the dissolved $\text{CO}_2$.  
+
+First, we need to calculate the Kh for helium at our analytical pressure (assuming He behaves like an ideal gas) using the van't Hoff equation:  
+$$K_{H} = K_{H \text {std}} \times \exp(\frac{\Delta{\displaystyle H}}{\displaystyle R} \times (\frac{\displaystyle 1}{\displaystyle T} - \frac{\displaystyle 1}{\displaystyle T_{\text {std}}}))$$
+
+```{r}
+#calculate Kh of He at the lab temperature
+df <- df %>%
+  mutate(Kh_he = 0.00038 * exp(92 * ((1/temp_lab_K) - (1/298.15)))  )
+```
+
+Then we can calculate the pressure in the headspace ($P_{He}$):  
+
+```{r}
+#define the gas constant (R; L atm / mol K)
+R_gas <- 0.08205737
+
+df <- df %>%
+  mutate(p_He_atm = ((p_lab_atm * he_inj_L)/(R_gas * temp_lab_K)) / ((vol_waterHS_L * Kh_he) + (vol_HS_L / (R_gas * temp_lab_K)))   )
+```
+
+## Back to it...
+
+Ok, so going back to our original equation of $p\text{CO}_2=x \times P_{\text {air}}$, but in this case, $P_{\text {air}}$ is actually $P_{\text {He}}$ we just calculated!  
+
+Thus, we get:
+$$p\text{CO}_2=\frac{\displaystyle x}{\displaystyle 10^6} \times P_{\text {He}}$$
+which gives us our $p\text{CO}_2$ in the headspace of our vial.  
+
+```{r}
+#calculate pCO2 in headspace
+df <- df %>%
+  mutate(pCO2_HS = (measCO2_ppm / (10^6)) * p_He_atm )
+```
+
+Now we can use Henry's Law to calculate the dissolved concentration of $\text{CO}_2$ in the water of the vial with headspace.  
+
+## Calculation of dissolved CO2 using Henry's Law
+
+Henry's Law states:  
+$$K_{\text{CO}_2}=\frac{\displaystyle [\text{CO}_2]}{\displaystyle p\text{CO}_2}$$  
+and we can re-arrange it to get the dissolved $\text{CO}_2$:  
+$$[\text{CO}_2] = K_{\text{CO}_2} \times p\text{CO}_2$$
+at the lab pressure and temperature!  
+
+However, we need to correct the Henry constant for $p\text{CO}_2$ ($K_{\text{CO}_2}$) for lab temperature and salinity.  
+
+### Temperature and Salinity Correction for $K_{\text{CO}_2}$
+
+We use the temperature and salinity corrected equations to determine $\text{CO}_2$ solubility based on [Weiss 1974](https://www.sciencedirect.com/science/article/abs/pii/0304420374900152). This equation is a combination of the van't Hoff and Setchenow
+equations.  
+
+To calculate the temperature and salinity corrected $K_H$ for $\text{CO}_2$ (in $\text {mol L}^{-1} \text{atm}^{-1}$), we use:  
+$$ lnK_0 = A_1 + A_2(100/T) + A_3ln(T/100) + S[B_1 + B_2(T/100) + B_3(T/100)^2]$$
+where  
+$T$ = sample temperature (in K)  
+$S$ = salinity (‰)  
+and the rest are constants from Weiss (1974):  
+$A_1$ = -58.0931  
+$A_2$ = 90.5069  
+$A_3$ = 22.294  
+$B_1$ = 0.027766  
+$B_2$ = -0.025888  
+$B_3$ = 0.0050578  
+
+Now we calculate $K_H$ corrected for temperature and S:  
+
+```{r}
+#define constants
+a1 <- -58.0931
+a2 <- 90.5069
+a3 <- 22.294
+b1 <- 0.027766
+b2 <- -0.025888
+b3 <- 0.0050578
+
+#calculate salinity
+df <- df %>%
+  mutate(sal_permil = KCl_added_g / vol_water_L)
+
+#calculate Kh of CO2 (mol/L atm)
+#remember, 'log' here is 'ln' (not log10()
+df <- df %>%
+  mutate(Kh_co2 = exp(a1 + (a2*(100/temp_lab_K)) + (a3 * log(temp_lab_K/100)) + (sal_permil * (b1 + (b2 * (temp_lab_K/100)) + (b3 * ((temp_lab_K/100)^2))))) )
+```
+
+## Back to it...
+
+and from that calculate the concentration of dissolved $\text{CO}_2$ in the vial with headspace:  
+
+```{r}
+#calculate CO2 concentration in vial water (with headspace)
+df <- df %>%
+  mutate(CO2_vial_mol.L = Kh_co2 * pCO2_HS)
+```
+
+## Calculate the $[\text{CO}_2]$ in the original vial  
+
+We have the concentration of $\text{CO}_2$ in both the water with headspace, and in the headspace itself. Now we want to calculate the $\text{CO}_2$ concentration in the vial *before* we created a headspace.  
+
+To do this, we assume all $\text{CO}_2$ was dissolved, thus:  
+$$\frac{\displaystyle n_{\text {HS}} + n_{\text {dissolved}} }{\displaystyle V_{\text {sample+HS}}}=[\text{CO}_2]$$
+
+where  
+
+$V_{\text {sample+HS}}$ = volume of the vial with sample and headspace  
+
+$$\frac{\displaystyle {\frac{p\text{CO}_2 \times V_{\text {HS}}}{R \times T}} + ([\text{CO}_2]_{\text {diss}} \times V_{\text {sample+HS}}) }{\displaystyle V_{\text {sample+HS}}}=[\text{CO}_2]_{\text {orig}}$$
+
+where  
+$[\text{CO}_2]_{\text {orig}}$ represents the concentration of $\text{CO}_2$ in the vial with no headspace (i.e. vial as it came from the field), and represents the concentration of $\text{CO}_2$ in the water at time of sampling.  
+
+```{r}
+#calculate the [CO2] in water (before headspace)
+df <- df %>%
+  mutate(n_HS = (pCO2_HS * vol_HS_L)/(R_gas * temp_lab_K),
+         n_diss = CO2_vial_mol.L * vol_waterHS_L,
+         co2_orig = (n_HS + n_diss) / vol_waterHS_L)
+
+```
+
+## Calculate the various units of pCO2 (uM, atm, and %-saturation)  
+
+We can calculate the $\text {CO}_2$ %-saturation with respect to the atmosphere via:  
+$$\text {Percent-saturation} = \frac{\displaystyle [\text {CO}_2]_{\text {orig}}}{\displaystyle [\text {CO}_2]_{\text {sat}}} \times 100$$  
+Which can be calculated as:  
+
+$$\text {Percent-saturation} = \frac{\displaystyle [\text {CO}_2]_{\text {orig}}}{\displaystyle K_H \times (\text {CO}_{2 \text { atm}} \times 10^{-6} \times P_{\text {field}})} \times 100$$  
+where  
+$K_H$ is calculated at the field temperature and pressure  
+$\text {CO}_{2 \text { atm}}$ is the atmospheric concentration of $\text {CO}_2$  
+
+```{r}
+#set the atmospheric concentration of CO2
+CO2_air_ppm <- 410
+
+#calculate Kh of CO2 for the field (only the first half of Weiss 1974)
+df <- df %>%
+  mutate(Kh_co2_field = exp(a1 + (a2*(100/temp_field_K)) + (a3 * log(temp_field_K/100))),
+         CO2_perc_sat = (co2_orig / (Kh_co2_field * (CO2_air_ppm * (10^-6) * p_field_atm))) * 100)
+```
+
+Finally, we end with calculating the various $p\text {CO}_2$ units  
+
+```{r}
+df <- df %>%
+  mutate(pCO2_uM = co2_orig * 10^6,
+         pCO2_uatm = (co2_orig / Kh_co2_field) * 10^6)
+```

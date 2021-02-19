@@ -25,12 +25,12 @@ Up to this point, a number of parameters are already known. They include:
 - Weight of the container with headspace (g)  
 - Injected amount of helium (mL) - CO2 value from GC (ppm)  
 
-You would begin by creating a dataframe `df` such as:
+You would begin by creating a dataframe `dat` such as:
 
 ```{r, echo=FALSE}
 library(tidyverse)
 
-df <- data.frame(Sample = c('Fun Lake', 'Not Fun Lake'),
+dat <- data.frame(Sample = c('Fun Lake', 'Not Fun Lake'),
                  temp_field_C = c(25, 4),
                  p_field_kPa = c(100, 93.5),
                  temp_lab_C = c(22, 22),
@@ -50,7 +50,7 @@ the various calculations, as well as calculate the total water volume
 before and after headspace:
 
 ```{r}
-df <- df %>%
+dat <- dat %>%
   mutate(temp_field_K = temp_field_C + 273.15,
          temp_lab_K = temp_lab_C + 273.15,
          p_field_atm = p_field_kPa * 0.009869,
@@ -98,7 +98,7 @@ $$K_{H} = K_{H \text {std}} \times \exp(\frac{\Delta{\displaystyle H}}{\displays
 
 ```{r}
 #calculate Kh of He at the lab temperature
-df <- df %>%
+dat <- dat %>%
   mutate(Kh_he = 0.00038 * exp(92 * ((1/temp_lab_K) - (1/298.15)))  )
 ```
 
@@ -108,7 +108,7 @@ Then we can calculate the pressure in the headspace ($P_{He}$):
 #define the gas constant (R; L atm / mol K)
 R_gas <- 0.08205737
 
-df <- df %>%
+dat <- dat %>%
   mutate(p_He_atm = ((p_lab_atm * he_inj_L)/(R_gas * temp_lab_K)) / ((vol_waterHS_L * Kh_he) + (vol_HS_L / (R_gas * temp_lab_K)))   )
 ```
 
@@ -122,7 +122,7 @@ which gives us our $p\text{CO}_2$ in the headspace of our vial.
 
 ```{r}
 #calculate pCO2 in headspace
-df <- df %>%
+dat <- dat %>%
   mutate(pCO2_HS = (measCO2_ppm / (10^6)) * p_He_atm )
 ```
 
@@ -168,12 +168,12 @@ b2 <- -0.025888
 b3 <- 0.0050578
 
 #calculate salinity
-df <- df %>%
+dat <- dat %>%
   mutate(sal_permil = KCl_added_g / vol_water_L)
 
 #calculate Kh of CO2 (mol/L atm)
 #remember, 'log' here is 'ln' (not log10()
-df <- df %>%
+dat <- dat %>%
   mutate(Kh_co2 = exp(a1 + (a2*(100/temp_lab_K)) + (a3 * log(temp_lab_K/100)) + (sal_permil * (b1 + (b2 * (temp_lab_K/100)) + (b3 * ((temp_lab_K/100)^2))))) )
 ```
 
@@ -183,7 +183,7 @@ and from that calculate the concentration of dissolved $\text{CO}_2$ in the vial
 
 ```{r}
 #calculate CO2 concentration in vial water (with headspace)
-df <- df %>%
+dat <- dat %>%
   mutate(CO2_vial_mol.L = Kh_co2 * pCO2_HS)
 ```
 
@@ -205,7 +205,7 @@ $[\text{CO}_2]_{\text {orig}}$ represents the concentration of $\text{CO}_2$ in 
 
 ```{r}
 #calculate the [CO2] in water (before headspace)
-df <- df %>%
+dat <- dat %>%
   mutate(n_HS = (pCO2_HS * vol_HS_L)/(R_gas * temp_lab_K),
          n_diss = CO2_vial_mol.L * vol_waterHS_L,
          co2_orig = (n_HS + n_diss) / vol_waterHS_L)
@@ -228,7 +228,7 @@ $\text {CO}_{2 \text { atm}}$ is the atmospheric concentration of $\text {CO}_2$
 CO2_air_ppm <- 410
 
 #calculate Kh of CO2 for the field (only the first half of Weiss 1974)
-df <- df %>%
+dat <- dat %>%
   mutate(Kh_co2_field = exp(a1 + (a2*(100/temp_field_K)) + (a3 * log(temp_field_K/100))),
          CO2_perc_sat = (co2_orig / (Kh_co2_field * (CO2_air_ppm * (10^-6) * p_field_atm))) * 100)
 ```
@@ -236,7 +236,7 @@ df <- df %>%
 Finally, we end with calculating the various $p\text {CO}_2$ units  
 
 ```{r}
-df <- df %>%
+dat <- dat %>%
   mutate(pCO2_uM = co2_orig * 10^6,
          pCO2_uatm = (co2_orig / Kh_co2_field) * 10^6)
 ```

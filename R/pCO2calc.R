@@ -1,7 +1,7 @@
 #' Calculation of pCO2 within a water sample using Henry's Law
 #'
 #' This takes the CO2 using the head-space equilibirum technique and calculates water sample pCO2.
-#' @param df Dataframe with all the values
+#' @param dat Dataframe with all the values
 #' @param temp_field_C Measured temperature of the water in the field (C)
 #' @param p_field_kPa Measured barometric pressure in the field (kPa)
 #' @param temp_lab_C Measured temperature in the lab during analysis (C)
@@ -21,21 +21,21 @@
 
 
 
-pCO2calc <- function(df, temp_field_C, p_field_kPa, temp_lab_C, p_lab_kPa, salt_added_g,
+pCO2calc <- function(dat, temp_field_C, p_field_kPa, temp_lab_C, p_lab_kPa, salt_added_g,
                      vial_g, vial_full_g, vial_HS_g, he_inj_mL, measCO2_ppm, atmCO2_ppm){
 
   ## Check to see if using values or specific columns for each parameter ##
-  temp_field_C <- if(is.numeric(temp_field_C) == TRUE) {temp_field_C} else {df[[temp_field_C]]}
-  p_field_kPa <- if(is.numeric(p_field_kPa) == TRUE) {p_field_kPa} else {df[[p_field_kPa]]}
-  temp_lab_C <- if(is.numeric(temp_lab_C) == TRUE) {temp_lab_C} else {df[[temp_lab_C]]}
-  p_lab_kPa <- if(is.numeric(p_lab_kPa) == TRUE) {p_lab_kPa} else {df[[p_lab_kPa]]}
-  salt_added_g <- if(is.numeric(salt_added_g) == TRUE) {salt_added_g} else {df[[salt_added_g]]}
-  vial_g <- if(is.numeric(vial_g) == TRUE) {vial_g} else {df[[vial_g]]}
-  vial_full_g <- if(is.numeric(vial_full_g) == TRUE) {vial_full_g} else {df[[vial_full_g]]}
-  vial_HS_g <- if(is.numeric(vial_HS_g) == TRUE) {vial_HS_g} else {df[[vial_HS_g]]}
-  he_inj_mL <- if(is.numeric(he_inj_mL) == TRUE) {he_inj_mL} else {df[[he_inj_mL]]}
-  measCO2_ppm <- if(is.numeric(measCO2_ppm) == TRUE) {measCO2_ppm} else {df[[measCO2_ppm]]}
-  atmCO2_ppm <- if(is.numeric(atmCO2_ppm) == TRUE) {atmCO2_ppm} else {df[[atmCO2_ppm]]}
+  temp_field_C <- if(is.numeric(temp_field_C) == TRUE) {temp_field_C} else {dat[[temp_field_C]]}
+  p_field_kPa <- if(is.numeric(p_field_kPa) == TRUE) {p_field_kPa} else {dat[[p_field_kPa]]}
+  temp_lab_C <- if(is.numeric(temp_lab_C) == TRUE) {temp_lab_C} else {dat[[temp_lab_C]]}
+  p_lab_kPa <- if(is.numeric(p_lab_kPa) == TRUE) {p_lab_kPa} else {dat[[p_lab_kPa]]}
+  salt_added_g <- if(is.numeric(salt_added_g) == TRUE) {salt_added_g} else {dat[[salt_added_g]]}
+  vial_g <- if(is.numeric(vial_g) == TRUE) {vial_g} else {dat[[vial_g]]}
+  vial_full_g <- if(is.numeric(vial_full_g) == TRUE) {vial_full_g} else {dat[[vial_full_g]]}
+  vial_HS_g <- if(is.numeric(vial_HS_g) == TRUE) {vial_HS_g} else {dat[[vial_HS_g]]}
+  he_inj_mL <- if(is.numeric(he_inj_mL) == TRUE) {he_inj_mL} else {dat[[he_inj_mL]]}
+  measCO2_ppm <- if(is.numeric(measCO2_ppm) == TRUE) {measCO2_ppm} else {dat[[measCO2_ppm]]}
+  atmCO2_ppm <- if(is.numeric(atmCO2_ppm) == TRUE) {atmCO2_ppm} else {dat[[atmCO2_ppm]]}
 
 
   ## Convert units ##
@@ -92,10 +92,10 @@ pCO2calc <- function(df, temp_field_C, p_field_kPa, temp_lab_C, p_lab_kPa, salt_
   pCO2_uatm <- (co2_orig / Kh_co2_field) * 10^6
 
   #Export these results to the original dataframe
-  df$pCO2_uM <- pCO2_uM
-  df$pCO2_uatm <- pCO2_uatm
-  df$pCO2_perc_sat <- CO2_perc_sat
+  dat$pCO2_uM <- pCO2_uM
+  dat$pCO2_uatm <- pCO2_uatm
+  dat$pCO2_perc_sat <- CO2_perc_sat
 
-  return(df)
+  return(dat)
 
 }

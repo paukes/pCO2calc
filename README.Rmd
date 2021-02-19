@@ -1,0 +1,26 @@
+---
+output: 
+  github_document
+---
+# pCO2calc <img src="man/figures/pCO2calc_hexsticker" width="120" align="right" />
+
+## What this package does  
+
+
+### Detailed calculations  
+Can be found in the 'man/methodology' folder.  
+
+## Example
+```{r, include = FALSE}
+# install.packages("remotes")
+remotes::install_github("paukes/pCO2calc")
+```
+Load the package  
+```{r}
+library(pCO2calc)
+```
+
+
+
+
+
